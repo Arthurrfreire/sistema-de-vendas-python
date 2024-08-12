@@ -12,13 +12,10 @@ from fpdf import FPDF
 from datetime import datetime, timedelta
 import bcrypt
 
-# Carregar as variáveis de ambiente do arquivo .env
 load_dotenv()
 
-# Configurar localidade para formato brasileiro
 locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
 
-# Função para conectar ao banco de dados
 def conectar_bd():
     try:
         conn = psycopg2.connect(
@@ -35,13 +32,11 @@ def conectar_bd():
         messagebox.showerror("Erro", f"Erro ao conectar ao banco de dados: {error}")
         return None
 
-# Função para criar tabelas necessárias
 def criar_tabelas():
     conn = conectar_bd()
     if conn:
         cursor = conn.cursor()
         try:
-            # Criação da tabela usuarios
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS usuarios (
                     id SERIAL PRIMARY KEY,
@@ -50,7 +45,6 @@ def criar_tabelas():
                 );
             ''')
 
-            # Criação da tabela clientes
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS clientes (
                     id SERIAL PRIMARY KEY,
@@ -62,7 +56,6 @@ def criar_tabelas():
                 );
             ''')
 
-            # Criação da tabela pagamentos
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS pagamentos (
                     id SERIAL PRIMARY KEY,
@@ -77,7 +70,6 @@ def criar_tabelas():
                 );
             ''')
 
-            # Criação da tabela projetos com a coluna "recorrente"
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS projetos (
                     id SERIAL PRIMARY KEY,
@@ -102,7 +94,6 @@ def criar_tabelas():
     else:
         print("Erro ao conectar ao banco de dados para criar tabelas.")
 
-# Funções de manipulação do banco de dados para dados isolados por usuário
 def verificar_login(username, password):
     conn = conectar_bd()
     if conn:
@@ -114,22 +105,19 @@ def verificar_login(username, password):
 
         if user:
             print(f"Usuário encontrado: {user[0]}, {user[1]}")
-            # Comparação do hash
             if bcrypt.checkpw(password.encode('utf-8'), user[1].encode('utf-8')):
-                return user[0]  # Retorna o ID do usuário
+                return user[0]
         return None
 
 def registrar_usuario(username, password):
     conn = conectar_bd()
     if conn:
         cursor = conn.cursor()
-        # Verificar se o usuário já existe
         cursor.execute("SELECT id FROM usuarios WHERE username = %s", (username,))
         if cursor.fetchone():
             messagebox.showerror("Erro", "Nome de usuário já existe.")
             return
-        
-        # Hash da senha
+    
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         cursor.execute("INSERT INTO usuarios (username, password) VALUES (%s, %s)", (username, hashed_password))
         conn.commit()
@@ -159,13 +147,8 @@ def excluir_cliente(cliente_id, usuario_id):
         cursor = conn.cursor()
 
         try:
-            # Excluir pagamentos associados ao cliente
             cursor.execute("DELETE FROM pagamentos WHERE cliente_id=%s AND usuario_id=%s", (cliente_id, usuario_id))
-        
-            # Excluir projetos associados ao cliente
             cursor.execute("DELETE FROM projetos WHERE cliente_id=%s AND usuario_id=%s", (cliente_id, usuario_id))
-
-            # Agora, excluir o cliente
             cursor.execute("DELETE FROM clientes WHERE id=%s AND usuario_id=%s", (cliente_id, usuario_id))
             conn.commit()
             messagebox.showinfo("Sucesso", "Cliente excluído com sucesso!")
@@ -232,7 +215,6 @@ def verificar_alertas(usuario_id):
     if conn:
         cursor = conn.cursor()
 
-        # Alertas para pagamentos em aberto e próximos do vencimento
         cursor.execute('''
             SELECT clientes.nome, pagamentos.tipo_pagamento, pagamentos.valor, TO_CHAR(pagamentos.data_pagamento, 'DD-MM-YYYY')
             FROM pagamentos
@@ -249,7 +231,6 @@ def verificar_alertas(usuario_id):
                 alerta_pagamentos += f"Cliente: {pagamento[0]}, Tipo: {pagamento[1]}, Valor: {pagamento[2]}, Data: {pagamento[3]}\n"
             messagebox.showwarning("Alertas de Pagamentos", alerta_pagamentos)
 
-        # Alertas para projetos com data de entrega próxima
         cursor.execute('''
             SELECT clientes.nome, projetos.nome_projeto, TO_CHAR(projetos.data_entrega, 'DD-MM-YYYY')
             FROM projetos
@@ -267,7 +248,6 @@ def verificar_alertas(usuario_id):
 
         conn.close()
 
-# Função para carregar os projetos na tela inicial
 def carregar_projetos(usuario_id):
     conn = conectar_bd()
     if conn:
@@ -283,7 +263,6 @@ def carregar_projetos(usuario_id):
         conn.close()
         return projetos
 
-# Funções para exportar relatórios
 def exportar_csv(dados, filepath):
     with open(filepath, mode='w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
@@ -324,15 +303,14 @@ def exportar_pdf(dados, filepath):
 
     pdf.output(filepath)
 
-# Interface gráfica
+
 class Application:
     def __init__(self, root):
         self.root = root
         self.root.title("Sistema de Gerenciamento de Clientes")
-        self.root.state('zoomed')  # Tela cheia, mas em modo janela
-        self.usuario_id = None  # Armazenar o ID do usuário logado
+        self.root.state('zoomed')  
+        self.usuario_id = None  
 
-        # Centralizar a tela de login
         self.login_frame = Frame(root)
         self.login_frame.place(relx=0.5, rely=0.5, anchor=CENTER)
 
@@ -358,10 +336,10 @@ class Application:
 
         user_id = verificar_login(username, password)
         if user_id:
-            self.usuario_id = user_id  # Armazenar o ID do usuário logado
-            self.login_frame.place_forget()  # Oculta a tela de login após o login bem-sucedido
+            self.usuario_id = user_id  
+            self.login_frame.place_forget()  
             self.show_menu()
-            verificar_alertas(self.usuario_id)  # Verificar alertas após login
+            verificar_alertas(self.usuario_id)  
         else:
             messagebox.showerror("Erro", "Usuário ou senha incorretos")
 
@@ -396,18 +374,18 @@ class Application:
 
     def show_login(self):
         if hasattr(self, 'register_frame'):
-            self.register_frame.place_forget()  # Esconde a tela de registro, se existente
+            self.register_frame.place_forget()  
         if hasattr(self, 'menu_frame'):
-            self.menu_frame.pack_forget()  # Esconde a tela de menu, se existente
-        self.login_frame.place(relx=0.5, rely=0.5, anchor=CENTER)  # Volta para a tela de login
+            self.menu_frame.pack_forget()  
+        self.login_frame.place(relx=0.5, rely=0.5, anchor=CENTER)  
 
     def show_menu(self):
         if hasattr(self, 'menu_frame'):
-            self.menu_frame.pack_forget()  # Limpa o frame do menu anterior
+            self.menu_frame.pack_forget()  
         if hasattr(self, 'projetos_frame'):
-            self.projetos_frame.pack_forget()  # Remove o frame de projetos se existente
+            self.projetos_frame.pack_forget()  
         if hasattr(self, 'cadastrar_cliente_frame'):
-            self.cadastrar_cliente_frame.place_forget()  # Remove o frame de cadastro de cliente se existente
+            self.cadastrar_cliente_frame.place_forget()  
 
         self.menu_frame = Frame(self.root)
         self.menu_frame.pack(side=TOP, fill=X)
@@ -419,10 +397,10 @@ class Application:
         Button(self.menu_frame, text="Cadastrar Projeto", command=self.show_cadastrar_projeto, font=("Arial", 12)).pack(side=LEFT, padx=10, pady=10)
         Button(self.menu_frame, text="Sair", command=self.logout, font=("Arial", 12)).pack(side=RIGHT, padx=10, pady=10)
         
-        self.mostrar_projetos_cadastrados()  # Certifique-se de que esta função seja chamada após os botões principais serem configurados
+        self.mostrar_projetos_cadastrados()  
 
     def mostrar_projetos_cadastrados(self):
-        # Frame específico para mostrar projetos
+       
         self.projetos_frame = Frame(self.root)
         self.projetos_frame.pack(fill=BOTH, expand=True)
 
@@ -431,11 +409,10 @@ class Application:
         self.tree.heading("Projeto", text="Projeto")
         self.tree.heading("Data de Entrega", text="Data de Entrega")
         self.tree.heading("Recorrente", text="Recorrente")
-        self.tree.heading("ID do Projeto", text="ID do Projeto")  # Oculto, mas pode ser útil
+        self.tree.heading("ID do Projeto", text="ID do Projeto") 
 
         self.tree.pack(fill=BOTH, expand=True)
 
-        # Limpa o Treeview antes de inserir novos dados
         self.tree.delete(*self.tree.get_children())
 
         projetos = carregar_projetos(self.usuario_id)
@@ -444,7 +421,6 @@ class Application:
                 recorrente_texto = "Mensal" if projeto[3] else "Único"
                 self.tree.insert("", END, values=(projeto[0], projeto[1], projeto[2], recorrente_texto, projeto[4]))
 
-        # Botões para editar e excluir projetos na tela inicial
         self.btn_editar_projeto = Button(self.projetos_frame, text="Editar Projeto", command=self.editar_projeto, font=("Arial", 12))
         self.btn_editar_projeto.pack(side=LEFT, padx=10, pady=10)
 
@@ -453,16 +429,16 @@ class Application:
 
     def logout(self):
         if hasattr(self, 'projetos_frame'):
-            self.projetos_frame.pack_forget()  # Remove o frame de projetos ao fazer logout
+            self.projetos_frame.pack_forget()  
         self.show_login()
 
     def show_cadastrar_cliente(self):
         self.menu_frame.pack_forget()
         if hasattr(self, 'projetos_frame'):
-            self.projetos_frame.pack_forget()  # Remove o frame de projetos ao entrar em outra tela
+            self.projetos_frame.pack_forget()  
 
         self.cadastrar_cliente_frame = Frame(self.root)
-        self.cadastrar_cliente_frame.place(relx=0.5, rely=0.5, anchor=CENTER)  # Centralizando a tela
+        self.cadastrar_cliente_frame.place(relx=0.5, rely=0.5, anchor=CENTER)
 
         Label(self.cadastrar_cliente_frame, text="Cadastrar Cliente", font=("Arial", 14)).grid(row=0, column=0, columnspan=2, pady=10)
 
@@ -499,40 +475,35 @@ class Application:
     def show_cadastrar_pagamento(self):
         self.menu_frame.pack_forget()
         if hasattr(self, 'projetos_frame'):
-            self.projetos_frame.pack_forget()  # Remove o frame de projetos ao entrar em outra tela
+            self.projetos_frame.pack_forget()  
 
         self.cadastrar_pagamento_frame = Frame(self.root)
-        self.cadastrar_pagamento_frame.place(relx=0.5, rely=0.5, anchor=CENTER)  # Centralizar a tela
+        self.cadastrar_pagamento_frame.place(relx=0.5, rely=0.5, anchor=CENTER)
 
         Label(self.cadastrar_pagamento_frame, text="Cadastrar Pagamento", font=("Arial", 14)).grid(row=0, column=0, columnspan=2, pady=10)
 
-        # Seleção do cliente
         Label(self.cadastrar_pagamento_frame, text="Cliente", font=("Arial", 12)).grid(row=1, column=0, sticky=E, pady=5)
         self.pagamento_cliente_id_combobox = ttk.Combobox(self.cadastrar_pagamento_frame, font=("Arial", 12))
         self.pagamento_cliente_id_combobox.grid(row=1, column=1, pady=5)
         self.carregar_clientes()
 
-        # Tipo de pagamento
         Label(self.cadastrar_pagamento_frame, text="Tipo de Pagamento", font=("Arial", 12)).grid(row=2, column=0, sticky=E, pady=5)
         self.pagamento_tipo_combobox = ttk.Combobox(self.cadastrar_pagamento_frame, font=("Arial", 12), values=[
             'PIX', 'Cartão de Débito', 'Cartão de Crédito', 'Dinheiro'
         ])
         self.pagamento_tipo_combobox.grid(row=2, column=1, pady=5)
 
-        # Valor do pagamento
         Label(self.cadastrar_pagamento_frame, text="Valor (R$)", font=("Arial", 12)).grid(row=3, column=0, sticky=E, pady=5)
         self.pagamento_valor_entry = Entry(self.cadastrar_pagamento_frame, font=("Arial", 12))
         self.pagamento_valor_entry.grid(row=3, column=1, pady=5)
         self.pagamento_valor_entry.bind('<FocusOut>', self.formatar_valor)
 
-        # Data de pagamento
         Label(self.cadastrar_pagamento_frame, text="Data de Pagamento", font=("Arial", 12)).grid(row=4, column=0, sticky=E, pady=5)
         self.pagamento_data_entry = Entry(self.cadastrar_pagamento_frame, font=("Arial", 12))
         self.pagamento_data_entry.grid(row=4, column=1, pady=5)
 
         Button(self.cadastrar_pagamento_frame, text="Selecionar Data", command=self.mostrar_calendario, font=("Arial", 12)).grid(row=4, column=2, pady=5, padx=5)
 
-        # Status do pagamento
         Label(self.cadastrar_pagamento_frame, text="Status", font=("Arial", 12)).grid(row=5, column=0, sticky=E, pady=5)
         self.pagamento_status_combobox = ttk.Combobox(self.cadastrar_pagamento_frame, font=("Arial", 12), values=[
             'Pago', 'Em Aberto'
@@ -591,12 +562,11 @@ class Application:
     def show_clientes_pagamentos(self):
         self.menu_frame.pack_forget()
         if hasattr(self, 'projetos_frame'):
-            self.projetos_frame.pack_forget()  # Remove o frame de projetos ao entrar em outra tela
+            self.projetos_frame.pack_forget()  
 
         self.clientes_pagamentos_frame = Frame(self.root)
         self.clientes_pagamentos_frame.pack(fill=BOTH, expand=True)
 
-        # Criação do Frame de Botões
         self.clientes_pagamentos_buttons_frame = Frame(self.root)
         self.clientes_pagamentos_buttons_frame.pack(side=TOP, fill=X)
 
@@ -628,7 +598,6 @@ class Application:
 
         self.tree.bind("<<TreeviewSelect>>", self.mostrar_detalhes_pagamentos)
 
-        # Botões para editar e excluir pagamentos também podem ser movidos aqui se necessário
         Button(self.detalhes_frame, text="Editar Pagamento", command=self.editar_pagamento, font=("Arial", 12)).pack(side=LEFT, padx=10, pady=10)
         Button(self.detalhes_frame, text="Excluir Pagamento", command=self.excluir_pagamento, font=("Arial", 12)).pack(side=LEFT, padx=10, pady=10)
 
@@ -650,7 +619,7 @@ class Application:
         
         cliente_id = self.tree.item(selected_item[0], "values")[0]
 
-        self.detalhes_tree.delete(*self.detalhes_tree.get_children())  # Limpar a árvore de detalhes
+        self.detalhes_tree.delete(*self.detalhes_tree.get_children())  
 
         conn = conectar_bd()
         if conn:
@@ -673,7 +642,6 @@ class Application:
         cliente_email = self.tree.item(selected_item[0], "values")[2]
         cliente_telefone = self.tree.item(selected_item[0], "values")[3]
 
-        # Criação da janela para editar o cliente
         self.editar_cliente_toplevel = Toplevel(self.root)
         self.editar_cliente_toplevel.title("Editar Cliente")
 
@@ -702,8 +670,8 @@ class Application:
         editar_cliente(cliente_id, nome, email, telefone, self.usuario_id)
         messagebox.showinfo("Sucesso", "Cliente editado com sucesso!")
         self.editar_cliente_toplevel.destroy()
-        self.tree.delete(*self.tree.get_children())  # Limpar a árvore de clientes antes de recarregar
-        self.carregar_clientes_pagamentos()  # Atualiza a lista de clientes e pagamentos
+        self.tree.delete(*self.tree.get_children())  
+        self.carregar_clientes_pagamentos()  
 
     def excluir_cliente(self):
         selected_item = self.tree.selection()
@@ -715,7 +683,7 @@ class Application:
         confirmar = messagebox.askyesno("Confirmação", "Tem certeza que deseja excluir este cliente?")
         if confirmar:
             excluir_cliente(cliente_id, self.usuario_id)
-            self.show_clientes_pagamentos()  # Atualiza a lista de clientes e pagamentos
+            self.show_clientes_pagamentos()  
 
     def editar_pagamento(self):
         selected_item = self.detalhes_tree.selection()
@@ -729,7 +697,6 @@ class Application:
         pagamento_data = self.detalhes_tree.item(selected_item[0], "values")[3]
         pagamento_status = self.detalhes_tree.item(selected_item[0], "values")[4]
 
-        # Criação da janela para editar o pagamento
         self.editar_pagamento_toplevel = Toplevel(self.root)
         self.editar_pagamento_toplevel.title("Editar Pagamento")
 
@@ -782,7 +749,7 @@ class Application:
             editar_pagamento(pagamento_id, tipo_pagamento, valor, data_pagamento, status, self.usuario_id)
             messagebox.showinfo("Sucesso", "Pagamento editado com sucesso!")
             self.editar_pagamento_toplevel.destroy()
-            self.mostrar_detalhes_pagamentos(None)  # Atualiza a lista de detalhes de pagamentos
+            self.mostrar_detalhes_pagamentos(None)  
         except Exception as e:
             messagebox.showerror("Erro", f"Ocorreu um erro ao editar o pagamento: {e}")
 
@@ -796,7 +763,7 @@ class Application:
         confirmar = messagebox.askyesno("Confirmação", "Tem certeza que deseja excluir este pagamento?")
         if confirmar:
             excluir_pagamento(pagamento_id, self.usuario_id)
-            self.mostrar_detalhes_pagamentos(None)  # Atualiza a lista de detalhes de pagamentos
+            self.mostrar_detalhes_pagamentos(None)  
 
     def show_menu_from_clientes_pagamentos(self):
         self.clientes_pagamentos_frame.pack_forget()
@@ -804,26 +771,21 @@ class Application:
         self.show_menu()
 
     def show_relatorios(self):
-        # Esconder o menu principal e outros frames
         self.menu_frame.pack_forget()
         if hasattr(self, 'projetos_frame'):
             self.projetos_frame.pack_forget()
 
-        # Definir o tamanho da janela de relatórios
         largura_janela = 800
         altura_janela = 600
 
-        # Centralizar a janela na tela
         largura_tela = self.root.winfo_screenwidth()
         altura_tela = self.root.winfo_screenheight()
         x_posicao = (largura_tela // 2) - (largura_janela // 2)
         y_posicao = (altura_tela // 2) - (altura_janela // 2)
 
-        # Criação do frame de relatórios
         self.relatorios_frame = Frame(self.root, width=largura_janela, height=altura_janela)
         self.relatorios_frame.place(x=x_posicao, y=y_posicao)
 
-        # Definir widgets dentro do frame de relatórios
         Label(self.relatorios_frame, text="Cliente", font=("Arial", 12)).grid(row=0, column=0, sticky=E, pady=5)
         self.relatorios_cliente_id_combobox = ttk.Combobox(self.relatorios_frame, font=("Arial", 12))
         self.relatorios_cliente_id_combobox.grid(row=0, column=1, pady=5)
@@ -916,8 +878,6 @@ class Application:
                 dados_projetos = []
 
             conn.close()
-
-            # Combinar os dados de pagamentos e projetos para o relatório "Ambos"
             if tipo_relatorio == 'Ambos':
                 return dados_pagamentos + dados_projetos
             elif tipo_relatorio == 'Pagamentos':
@@ -933,45 +893,39 @@ class Application:
     def show_cadastrar_projeto(self):
         self.menu_frame.pack_forget()
         if hasattr(self, 'projetos_frame'):
-            self.projetos_frame.pack_forget()  # Remove o frame de projetos ao entrar em outra tela
+            self.projetos_frame.pack_forget()  
 
         self.cadastrar_projeto_frame = Frame(self.root)
-        self.cadastrar_projeto_frame.place(relx=0.5, rely=0.5, anchor=CENTER)  # Centralizar a tela
+        self.cadastrar_projeto_frame.place(relx=0.5, rely=0.5, anchor=CENTER)  
 
         Label(self.cadastrar_projeto_frame, text="Cadastrar Projeto", font=("Arial", 14)).grid(row=0, column=0, columnspan=2, pady=10)
 
-        # Seleção do cliente
         Label(self.cadastrar_projeto_frame, text="Cliente", font=("Arial", 12)).grid(row=1, column=0, sticky=E, pady=5)
         self.projeto_cliente_id_combobox = ttk.Combobox(self.cadastrar_projeto_frame, font=("Arial", 12))
         self.projeto_cliente_id_combobox.grid(row=1, column=1, pady=5)
         self.carregar_clientes_para_projetos()
 
-        # Nome do projeto
         Label(self.cadastrar_projeto_frame, text="Nome do Projeto", font=("Arial", 12)).grid(row=2, column=0, sticky=E, pady=5)
         self.projeto_nome_entry = Entry(self.cadastrar_projeto_frame, font=("Arial", 12))
         self.projeto_nome_entry.grid(row=2, column=1, pady=5)
 
-        # Tipo de projeto
         Label(self.cadastrar_projeto_frame, text="Tipo de Projeto", font=("Arial", 12)).grid(row=3, column=0, sticky=E, pady=5)
         self.projeto_tipo_combobox = ttk.Combobox(self.cadastrar_projeto_frame, font=("Arial", 12), values=[
             'Website', 'Aplicativo', 'Marketing', 'Consultoria'
         ])
         self.projeto_tipo_combobox.grid(row=3, column=1, pady=5)
 
-        # Valor do projeto
         Label(self.cadastrar_projeto_frame, text="Valor (R$)", font=("Arial", 12)).grid(row=4, column=0, sticky=E, pady=5)
         self.projeto_valor_entry = Entry(self.cadastrar_projeto_frame, font=("Arial", 12))
         self.projeto_valor_entry.grid(row=4, column=1, pady=5)
         self.projeto_valor_entry.bind('<FocusOut>', self.formatar_valor_projeto)
 
-        # Data de entrega
         Label(self.cadastrar_projeto_frame, text="Data de Entrega", font=("Arial", 12)).grid(row=5, column=0, sticky=E, pady=5)
         self.projeto_data_entry = Entry(self.cadastrar_projeto_frame, font=("Arial", 12))
         self.projeto_data_entry.grid(row=5, column=1, pady=5)
 
         Button(self.cadastrar_projeto_frame, text="Selecionar Data", command=self.mostrar_calendario_projeto, font=("Arial", 12)).grid(row=5, column=2, pady=5, padx=5)
 
-        # Projeto recorrente
         Label(self.cadastrar_projeto_frame, text="Recorrente", font=("Arial", 12)).grid(row=6, column=0, sticky=E, pady=5)
         self.projeto_recorrente_var = BooleanVar()
         Checkbutton(self.cadastrar_projeto_frame, variable=self.projeto_recorrente_var, onvalue=True, offvalue=False).grid(row=6, column=1, pady=5)
@@ -1043,12 +997,10 @@ class Application:
         data_entrega = self.tree.item(selected_item[0], "values")[2]
         recorrente_texto = self.tree.item(selected_item[0], "values")[3]
 
-        # Verifica se a janela de edição já existe e traz ela para o foco
         if hasattr(self, 'editar_projeto_toplevel') and self.editar_projeto_toplevel.winfo_exists():
             self.editar_projeto_toplevel.focus()
             return
 
-        # Criação da janela para editar o projeto
         self.editar_projeto_toplevel = Toplevel(self.root)
         self.editar_projeto_toplevel.title("Editar Projeto")
 
@@ -1059,7 +1011,6 @@ class Application:
         Label(self.editar_projeto_toplevel, text="Data de Entrega", font=("Arial", 12)).grid(row=4, column=0, pady=5, sticky=E)
         Label(self.editar_projeto_toplevel, text="Recorrente", font=("Arial", 12)).grid(row=5, column=0, pady=5, sticky=E)
 
-        # Cliente associado (não editável, apenas exibido)
         Label(self.editar_projeto_toplevel, text=cliente_nome, font=("Arial", 12, "bold")).grid(row=0, column=1, pady=5, sticky=W)
 
         self.editar_projeto_nome_entry = Entry(self.editar_projeto_toplevel, font=("Arial", 12))
@@ -1108,8 +1059,8 @@ class Application:
         recorrente = self.editar_projeto_recorrente_var.get()
         editar_projeto(projeto_id, nome_projeto, tipo_projeto, valor, data_entrega, recorrente, self.usuario_id)
         messagebox.showinfo("Sucesso", "Projeto editado com sucesso!")
-        self.editar_projeto_toplevel.destroy()  # Fecha a janela após a edição
-        self.mostrar_projetos_cadastrados()  # Atualiza a lista de projetos
+        self.editar_projeto_toplevel.destroy()  
+        self.mostrar_projetos_cadastrados()  
 
     def excluir_projeto(self):
         selected_item = self.tree.selection()
@@ -1121,12 +1072,10 @@ class Application:
         confirmar = messagebox.askyesno("Confirmação", "Tem certeza que deseja excluir este projeto?")
         if confirmar:
             excluir_projeto(projeto_id, self.usuario_id)
-            self.mostrar_projetos_cadastrados()  # Atualiza a lista de projetos
+            self.mostrar_projetos_cadastrados()  
 
-# Inicializa o banco de dados ao iniciar o programa
 criar_tabelas()
 
-# Executa a aplicação
 root = Tk()
 app = Application(root)
 root.mainloop()
