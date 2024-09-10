@@ -1,6 +1,5 @@
 import os
-from dotenv import load_dotenv
-import psycopg2
+import sqlite3
 from tkinter import *
 from tkinter import messagebox, filedialog, ttk
 from tkcalendar import Calendar, DateEntry
@@ -12,20 +11,15 @@ from fpdf import FPDF
 from datetime import datetime, timedelta
 import bcrypt
 
-load_dotenv()
-
 locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+
+# Caminho do banco de dados local SQLite
+DB_PATH = 'clientes.db'
 
 def conectar_bd():
     try:
-        conn = psycopg2.connect(
-            user=os.getenv('DB_USER'),
-            password=os.getenv('DB_PASSWORD'),
-            host=os.getenv('DB_HOST'),
-            port=os.getenv('DB_PORT'),
-            database=os.getenv('DB_NAME')
-        )
-        print("Conexão ao banco de dados realizada com sucesso!")
+        conn = sqlite3.connect(DB_PATH)
+        print("Conexão ao banco de dados SQLite realizada com sucesso!")
         return conn
     except Exception as error:
         print(f"Erro ao conectar ao banco de dados: {error}")
@@ -39,18 +33,18 @@ def criar_tabelas():
         try:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS usuarios (
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(255) UNIQUE NOT NULL,
-                    password VARCHAR(255) NOT NULL
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL
                 );
             ''')
 
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS clientes (
-                    id SERIAL PRIMARY KEY,
-                    nome VARCHAR(255) NOT NULL,
-                    email VARCHAR(255),
-                    telefone VARCHAR(20),
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nome TEXT NOT NULL,
+                    email TEXT,
+                    telefone TEXT,
                     usuario_id INTEGER NOT NULL,
                     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
                 );
@@ -58,12 +52,12 @@ def criar_tabelas():
 
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS pagamentos (
-                    id SERIAL PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     cliente_id INTEGER NOT NULL,
-                    tipo_pagamento VARCHAR(50) NOT NULL,
+                    tipo_pagamento TEXT NOT NULL,
                     valor DECIMAL(10, 2) NOT NULL,
                     data_pagamento DATE NOT NULL,
-                    status VARCHAR(20) NOT NULL,
+                    status TEXT NOT NULL,
                     usuario_id INTEGER NOT NULL,
                     FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
                     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
@@ -72,10 +66,10 @@ def criar_tabelas():
 
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS projetos (
-                    id SERIAL PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     cliente_id INTEGER NOT NULL,
-                    nome_projeto VARCHAR(255) NOT NULL,
-                    tipo_projeto VARCHAR(50) NOT NULL,
+                    nome_projeto TEXT NOT NULL,
+                    tipo_projeto TEXT NOT NULL,
                     valor DECIMAL(10, 2) NOT NULL,
                     data_entrega DATE NOT NULL,
                     recorrente BOOLEAN NOT NULL DEFAULT FALSE,
@@ -98,14 +92,13 @@ def verificar_login(username, password):
     conn = conectar_bd()
     if conn:
         cursor = conn.cursor()
-        print(f"Verificando usuário: {username}")
-        cursor.execute("SELECT id, password FROM usuarios WHERE username=%s", (username,))
+        cursor.execute("SELECT id, password FROM usuarios WHERE username=?", (username,))
         user = cursor.fetchone()
         conn.close()
 
         if user:
-            print(f"Usuário encontrado: {user[0]}, {user[1]}")
-            if bcrypt.checkpw(password.encode('utf-8'), user[1].encode('utf-8')):
+            stored_hash = user[1].encode('utf-8')
+            if bcrypt.checkpw(password.encode('utf-8'), stored_hash):
                 return user[0]
         return None
 
@@ -113,13 +106,14 @@ def registrar_usuario(username, password):
     conn = conectar_bd()
     if conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM usuarios WHERE username = %s", (username,))
+        cursor.execute("SELECT id FROM usuarios WHERE username = ?", (username,))
         if cursor.fetchone():
             messagebox.showerror("Erro", "Nome de usuário já existe.")
+            conn.close()
             return
-    
+
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        cursor.execute("INSERT INTO usuarios (username, password) VALUES (%s, %s)", (username, hashed_password))
+        cursor.execute("INSERT INTO usuarios (username, password) VALUES (?, ?)", (username, hashed_password))
         conn.commit()
         conn.close()
         print("Usuário registrado com sucesso!")
@@ -128,7 +122,7 @@ def cadastrar_cliente(nome, email, telefone, usuario_id):
     conn = conectar_bd()
     if conn:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO clientes (nome, email, telefone, usuario_id) VALUES (%s, %s, %s, %s)", (nome, email, telefone, usuario_id))
+        cursor.execute("INSERT INTO clientes (nome, email, telefone, usuario_id) VALUES (?, ?, ?, ?)", (nome, email, telefone, usuario_id))
         conn.commit()
         conn.close()
 
@@ -136,7 +130,7 @@ def editar_cliente(cliente_id, nome, email, telefone, usuario_id):
     conn = conectar_bd()
     if conn:
         cursor = conn.cursor()
-        cursor.execute('''UPDATE clientes SET nome=%s, email=%s, telefone=%s WHERE id=%s AND usuario_id=%s''', 
+        cursor.execute('''UPDATE clientes SET nome=?, email=?, telefone=? WHERE id=? AND usuario_id=?''', 
                        (nome, email, telefone, cliente_id, usuario_id))
         conn.commit()
         conn.close()
@@ -147,9 +141,9 @@ def excluir_cliente(cliente_id, usuario_id):
         cursor = conn.cursor()
 
         try:
-            cursor.execute("DELETE FROM pagamentos WHERE cliente_id=%s AND usuario_id=%s", (cliente_id, usuario_id))
-            cursor.execute("DELETE FROM projetos WHERE cliente_id=%s AND usuario_id=%s", (cliente_id, usuario_id))
-            cursor.execute("DELETE FROM clientes WHERE id=%s AND usuario_id=%s", (cliente_id, usuario_id))
+            cursor.execute("DELETE FROM pagamentos WHERE cliente_id=? AND usuario_id=?", (cliente_id, usuario_id))
+            cursor.execute("DELETE FROM projetos WHERE cliente_id=? AND usuario_id=?", (cliente_id, usuario_id))
+            cursor.execute("DELETE FROM clientes WHERE id=? AND usuario_id=?", (cliente_id, usuario_id))
             conn.commit()
             messagebox.showinfo("Sucesso", "Cliente excluído com sucesso!")
         except Exception as e:
@@ -163,7 +157,7 @@ def cadastrar_pagamento(cliente_id, tipo_pagamento, valor, data_pagamento, statu
     if conn:
         cursor = conn.cursor()
         cursor.execute('''INSERT INTO pagamentos (cliente_id, tipo_pagamento, valor, data_pagamento, status, usuario_id) 
-                          VALUES (%s, %s, %s, %s, %s, %s)''', (cliente_id, tipo_pagamento, valor, data_pagamento, status, usuario_id))
+                          VALUES (?, ?, ?, ?, ?, ?)''', (cliente_id, tipo_pagamento, valor, data_pagamento, status, usuario_id))
         conn.commit()
         conn.close()
 
@@ -171,8 +165,8 @@ def editar_pagamento(pagamento_id, tipo_pagamento, valor, data_pagamento, status
     conn = conectar_bd()
     if conn:
         cursor = conn.cursor()
-        cursor.execute('''UPDATE pagamentos SET tipo_pagamento=%s, valor=%s, data_pagamento=%s, status=%s 
-                          WHERE id=%s AND usuario_id=%s''', (tipo_pagamento, valor, data_pagamento, status, pagamento_id, usuario_id))
+        cursor.execute('''UPDATE pagamentos SET tipo_pagamento=?, valor=?, data_pagamento=?, status=? 
+                          WHERE id=? AND usuario_id=?''', (tipo_pagamento, valor, data_pagamento, status, pagamento_id, usuario_id))
         conn.commit()
         conn.close()
 
@@ -180,7 +174,7 @@ def excluir_pagamento(pagamento_id, usuario_id):
     conn = conectar_bd()
     if conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM pagamentos WHERE id=%s AND usuario_id=%s", (pagamento_id, usuario_id))
+        cursor.execute("DELETE FROM pagamentos WHERE id=? AND usuario_id=?", (pagamento_id, usuario_id))
         conn.commit()
         conn.close()
 
@@ -189,7 +183,7 @@ def cadastrar_projeto(cliente_id, nome_projeto, tipo_projeto, valor, data_entreg
     if conn:
         cursor = conn.cursor()
         cursor.execute('''INSERT INTO projetos (cliente_id, nome_projeto, tipo_projeto, valor, data_entrega, recorrente, usuario_id) 
-                          VALUES (%s, %s, %s, %s, %s, %s, %s)''', (cliente_id, nome_projeto, tipo_projeto, valor, data_entrega, recorrente, usuario_id))
+                          VALUES (?, ?, ?, ?, ?, ?, ?)''', (cliente_id, nome_projeto, tipo_projeto, valor, data_entrega, recorrente, usuario_id))
         conn.commit()
         conn.close()
 
@@ -197,8 +191,8 @@ def editar_projeto(projeto_id, nome_projeto, tipo_projeto, valor, data_entrega, 
     conn = conectar_bd()
     if conn:
         cursor = conn.cursor()
-        cursor.execute('''UPDATE projetos SET nome_projeto=%s, tipo_projeto=%s, valor=%s, data_entrega=%s, recorrente=%s 
-                          WHERE id=%s AND usuario_id=%s''', (nome_projeto, tipo_projeto, valor, data_entrega, recorrente, projeto_id, usuario_id))
+        cursor.execute('''UPDATE projetos SET nome_projeto=?, tipo_projeto=?, valor=?, data_entrega=?, recorrente=? 
+                          WHERE id=? AND usuario_id=?''', (nome_projeto, tipo_projeto, valor, data_entrega, recorrente, projeto_id, usuario_id))
         conn.commit()
         conn.close()
 
@@ -206,7 +200,7 @@ def excluir_projeto(projeto_id, usuario_id):
     conn = conectar_bd()
     if conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM projetos WHERE id=%s AND usuario_id=%s", (projeto_id, usuario_id))
+        cursor.execute("DELETE FROM projetos WHERE id=? AND usuario_id=?", (projeto_id, usuario_id))
         conn.commit()
         conn.close()
 
@@ -216,12 +210,12 @@ def verificar_alertas(usuario_id):
         cursor = conn.cursor()
 
         cursor.execute('''
-            SELECT clientes.nome, pagamentos.tipo_pagamento, pagamentos.valor, TO_CHAR(pagamentos.data_pagamento, 'DD-MM-YYYY')
+            SELECT clientes.nome, pagamentos.tipo_pagamento, pagamentos.valor, pagamentos.data_pagamento
             FROM pagamentos
             JOIN clientes ON pagamentos.cliente_id = clientes.id
             WHERE pagamentos.status = 'Em Aberto'
-            AND pagamentos.data_pagamento <= CURRENT_DATE + INTERVAL '7 days'
-            AND pagamentos.usuario_id = %s
+            AND pagamentos.data_pagamento <= DATE('now', '+7 days')
+            AND pagamentos.usuario_id = ?
         ''', (usuario_id,))
         pagamentos_pendentes = cursor.fetchall()
 
@@ -232,11 +226,11 @@ def verificar_alertas(usuario_id):
             messagebox.showwarning("Alertas de Pagamentos", alerta_pagamentos)
 
         cursor.execute('''
-            SELECT clientes.nome, projetos.nome_projeto, TO_CHAR(projetos.data_entrega, 'DD-MM-YYYY')
+            SELECT clientes.nome, projetos.nome_projeto, projetos.data_entrega
             FROM projetos
             JOIN clientes ON projetos.cliente_id = clientes.id
-            WHERE projetos.data_entrega <= CURRENT_DATE + INTERVAL '7 days'
-            AND projetos.usuario_id = %s
+            WHERE projetos.data_entrega <= DATE('now', '+7 days')
+            AND projetos.usuario_id = ?
         ''', (usuario_id,))
         projetos_proximos = cursor.fetchall()
 
@@ -253,10 +247,10 @@ def carregar_projetos(usuario_id):
     if conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT clientes.nome, projetos.nome_projeto, TO_CHAR(projetos.data_entrega, 'DD-MM-YYYY'), projetos.recorrente, projetos.id
+            SELECT clientes.nome, projetos.nome_projeto, projetos.data_entrega, projetos.recorrente, projetos.id
             FROM projetos
             JOIN clientes ON projetos.cliente_id = clientes.id
-            WHERE projetos.usuario_id = %s
+            WHERE projetos.usuario_id = ?
             ORDER BY projetos.data_entrega
         ''', (usuario_id,))
         projetos = cursor.fetchall()
@@ -302,7 +296,6 @@ def exportar_pdf(dados, filepath):
         pdf.ln(5)
 
     pdf.output(filepath)
-
 
 class Application:
     def __init__(self, root):
@@ -528,7 +521,7 @@ class Application:
         conn = conectar_bd()
         if conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, nome FROM clientes WHERE usuario_id=%s", (self.usuario_id,))
+            cursor.execute("SELECT id, nome FROM clientes WHERE usuario_id=?", (self.usuario_id,))
             clientes = cursor.fetchall()
             self.pagamento_cliente_id_combobox['values'] = [f"{cliente[0]} - {cliente[1]}" for cliente in clientes]
             conn.close()
@@ -605,7 +598,7 @@ class Application:
         conn = conectar_bd()
         if conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, nome, email, telefone FROM clientes WHERE usuario_id=%s", (self.usuario_id,))
+            cursor.execute("SELECT id, nome, email, telefone FROM clientes WHERE usuario_id=?", (self.usuario_id,))
             clientes = cursor.fetchall()
             for cliente in clientes:
                 self.tree.insert("", END, values=cliente)
@@ -624,7 +617,7 @@ class Application:
         conn = conectar_bd()
         if conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, tipo_pagamento, valor, TO_CHAR(data_pagamento, 'DD-MM-YYYY'), status FROM pagamentos WHERE cliente_id=%s AND usuario_id=%s", 
+            cursor.execute("SELECT id, tipo_pagamento, valor, data_pagamento, status FROM pagamentos WHERE cliente_id=? AND usuario_id=?", 
                            (cliente_id, self.usuario_id))
             pagamentos = cursor.fetchall()
             for pagamento in pagamentos:
@@ -814,7 +807,7 @@ class Application:
         conn = conectar_bd()
         if conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, nome FROM clientes WHERE usuario_id=%s", (self.usuario_id,))
+            cursor.execute("SELECT id, nome FROM clientes WHERE usuario_id=?", (self.usuario_id,))
             clientes = cursor.fetchall()
             self.relatorios_cliente_id_combobox['values'] = [f"{cliente[0]} - {cliente[1]}" for cliente in clientes]
             conn.close()
@@ -855,22 +848,22 @@ class Application:
         if conn:
             cursor = conn.cursor()
             query = """
-                SELECT c.id, c.nome, c.email, c.telefone, p.id, p.tipo_pagamento, p.valor, TO_CHAR(p.data_pagamento, 'DD-MM-YYYY'), p.status 
+                SELECT c.id, c.nome, c.email, c.telefone, p.id, p.tipo_pagamento, p.valor, p.data_pagamento, p.status 
                 FROM clientes c
                 LEFT JOIN pagamentos p ON c.id = p.cliente_id
-                WHERE c.usuario_id = %s AND c.id = %s
-                AND p.data_pagamento BETWEEN %s AND %s
+                WHERE c.usuario_id = ? AND c.id = ?
+                AND p.data_pagamento BETWEEN ? AND ?
             """
             cursor.execute(query, (self.usuario_id, cliente_id, data_inicial, data_final))
             dados_pagamentos = cursor.fetchall()
 
             if tipo_relatorio in ['Projetos', 'Ambos']:
                 query_projetos = """
-                    SELECT c.id, c.nome, c.email, c.telefone, pr.id, pr.tipo_projeto, pr.valor, TO_CHAR(pr.data_entrega, 'DD-MM-YYYY'), pr.recorrente
+                    SELECT c.id, c.nome, c.email, c.telefone, pr.id, pr.tipo_projeto, pr.valor, pr.data_entrega, pr.recorrente
                     FROM clientes c
                     LEFT JOIN projetos pr ON c.id = pr.cliente_id
-                    WHERE c.usuario_id = %s AND c.id = %s
-                    AND pr.data_entrega BETWEEN %s AND %s
+                    WHERE c.usuario_id = ? AND c.id = ?
+                    AND pr.data_entrega BETWEEN ? AND ?
                 """
                 cursor.execute(query_projetos, (self.usuario_id, cliente_id, data_inicial, data_final))
                 dados_projetos = cursor.fetchall()
@@ -948,7 +941,7 @@ class Application:
         conn = conectar_bd()
         if conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, nome FROM clientes WHERE usuario_id=%s", (self.usuario_id,))
+            cursor.execute("SELECT id, nome FROM clientes WHERE usuario_id=?", (self.usuario_id,))
             clientes = cursor.fetchall()
             self.projeto_cliente_id_combobox['values'] = [f"{cliente[0]} - {cliente[1]}" for cliente in clientes]
             conn.close()
