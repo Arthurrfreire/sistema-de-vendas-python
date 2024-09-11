@@ -128,12 +128,19 @@ Estrutura do Banco de Dados (SQLite)
 As principais dependências do projeto são:
 
 **Tkinter:** Biblioteca nativa para GUI em Python.
+
 **Tkcalendar:** Para entrada de data.
+
 **bcrypt:** Para hashing de senhas.
+
 **sqlite3:** Para o banco de dados local.
+
 **FPDF:** Para exportar relatórios em PDF.
+
 **csv:** Para exportar dados em CSV.
+
 **xml.etree.ElementTree:** Para exportar dados em XML.
+
 
 ## Licença
 
